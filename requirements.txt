@@ -1,0 +1,25 @@
+# Nexus AI Assistant - Python Dependencies
+# ==========================================
+# Install with: pip install -r requirements.txt
+
+# Core GUI Framework
+customtkinter>=5.2.0
+
+# Email & Authentication
+email-validator>=2.0.0
+python-dotenv>=1.0.0
+
+# SSH & Network
+paramiko>=3.0.0
+
+# System Monitoring
+psutil>=5.9.0
+
+# Data Visualization
+matplotlib>=3.7.0
+
+# Image Processing
+Pillow>=10.0.0
+
+# AI Integration
+google-generativeai>=0.3.0

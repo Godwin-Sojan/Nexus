@@ -50,6 +50,15 @@ def register_user(name, username, gmail, password, rpi_enabled=0):
     finally:
         conn.close()
 
+def user_exists(username):
+    """Check if a username already exists in the database."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM users WHERE username = ?", (username,))
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists
+
 def login_user(username, password):
     """Verify user credentials. Returns user info dict if valid, None otherwise."""
     conn = sqlite3.connect(DB_NAME)

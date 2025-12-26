@@ -125,6 +125,7 @@ class MainView(ctk.CTkFrame):
 
     def show_chatbot(self):
         self.switch_frame(self.chatbot_frame, self.chatbot_btn)
+        self.chatbot_frame.scroll_to_bottom()
 
     def show_rpi(self):
         self.switch_frame(self.rpi_frame, self.rpi_btn)

@@ -54,7 +54,9 @@ class RegisterFrame(ctk.CTkFrame):
         self.back_callback = back_callback
         self.master = master
         self.scanner = NetworkScanner()
-        self.email_verifier = EmailVerifier(sender_email="your_email@gmail.com", sender_password="your_app_password") # TODO: Load from config/env
+        
+        # Email verification is now console-based
+        self.email_verifier = EmailVerifier()
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -118,8 +120,9 @@ class RegisterFrame(ctk.CTkFrame):
             return
 
         # Check if username exists
-        # We can't check easily without a db call, but register will fail later if so.
-        # Ideally we check here, but let's proceed.
+        if database.user_exists(username):
+            messagebox.showerror("Error", "Username already exists")
+            return
         
         self.user_data = {
             "name": name,
@@ -138,24 +141,31 @@ class RegisterFrame(ctk.CTkFrame):
         self.clear_frame()
         ctk.CTkLabel(self.frame, text="RPi Setup", font=FONT_HEADER).pack(pady=(30, 10))
         
-        self.status_label = ctk.CTkLabel(self.frame, text="Scanning network...", font=FONT_BODY)
-        self.status_label.pack(pady=10)
+        # Container for device list (will be created only if devices found)
+        self.device_list_container = ctk.CTkFrame(self.frame, fg_color="transparent")
+        self.device_list_container.pack(pady=10, fill="both", expand=True)
         
-        self.device_list = ctk.CTkScrollableFrame(self.frame, width=280, height=150)
-        self.device_list.pack(pady=10)
+        self.device_list = None  # Will be created if devices are found
         
         # Manual IP Entry
-        self.manual_ip = ctk.CTkEntry(self.frame, placeholder_text="Or Enter IP Manually", width=280)
+        self.manual_ip = ctk.CTkEntry(self.frame, placeholder_text="Enter RPi IP Address", width=280, height=40, font=FONT_BODY)
         self.manual_ip.pack(pady=5)
 
         # Creds
-        self.rpi_user = ctk.CTkEntry(self.frame, placeholder_text="RPi Username (e.g. pi)", width=280)
+        self.rpi_user = ctk.CTkEntry(self.frame, placeholder_text="RPi Username (e.g. pi)", width=280, height=40, font=FONT_BODY)
         self.rpi_user.pack(pady=5)
-        self.rpi_pass = ctk.CTkEntry(self.frame, placeholder_text="RPi Password", show="*", width=280)
+        self.rpi_pass = ctk.CTkEntry(self.frame, placeholder_text="RPi Password", show="*", width=280, height=40, font=FONT_BODY)
         self.rpi_pass.pack(pady=5)
 
-        self.connect_btn = ctk.CTkButton(self.frame, text="Connect & Sync", width=280, command=self.connect_rpi, state="disabled")
-        self.connect_btn.pack(pady=20)
+        self.connect_btn = ctk.CTkButton(self.frame, text="Connect & Sync", width=280, height=40, font=FONT_BODY,
+                                         command=self.connect_rpi, state="disabled",
+                                         fg_color=COLOR_PRIMARY, hover_color=COLOR_SECONDARY)
+        self.connect_btn.pack(pady=15)
+        
+        # Status label at the bottom
+        self.status_label = ctk.CTkLabel(self.frame, text="🔍 Scanning network for RPi devices...", 
+                                         font=FONT_BODY, text_color="gray70")
+        self.status_label.pack(pady=(5, 20))
         
         # Start scan in background
         threading.Thread(target=self.run_scan, daemon=True).start()
@@ -165,17 +175,47 @@ class RegisterFrame(ctk.CTkFrame):
         self.master.after(0, lambda: self.update_device_list(devices))
 
     def update_device_list(self, devices):
-        self.status_label.configure(text=f"Found {len(devices)} devices with SSH")
         self.connect_btn.configure(state="normal")
         
-        for widget in self.device_list.winfo_children():
-            widget.destroy()
+        if len(devices) > 0:
+            # Devices found - show scrollable list
+            self.status_label.configure(text=f"✅ Found {len(devices)} device(s) with SSH", text_color="green")
             
-        for dev in devices:
-            btn = ctk.CTkButton(self.device_list, text=f"{dev['hostname']} ({dev['ip']})", 
-                                command=lambda ip=dev['ip']: self.select_device(ip),
-                                fg_color=COLOR_CARD, border_width=1, border_color="gray")
-            btn.pack(fill="x", pady=2)
+            # Create scrollable frame for devices
+            self.device_list = ctk.CTkScrollableFrame(self.device_list_container, width=280, height=120,
+                                                     fg_color=COLOR_BG, corner_radius=10)
+            self.device_list.pack(pady=5, fill="both", expand=True)
+            
+            ctk.CTkLabel(self.device_list_container, text="Select a device:", 
+                        font=("Roboto", 12, "bold"), text_color="gray70").pack(anchor="w", padx=10, pady=(0, 5))
+            
+            for dev in devices:
+                btn = ctk.CTkButton(self.device_list, text=f"🖥️  {dev['hostname']} ({dev['ip']})", 
+                                    command=lambda ip=dev['ip']: self.select_device(ip),
+                                    fg_color=COLOR_CARD, hover_color=COLOR_PRIMARY,
+                                    border_width=2, border_color="gray30",
+                                    anchor="w", font=FONT_BODY)
+                btn.pack(fill="x", pady=3, padx=5)
+        else:
+            # No devices found - show clean message
+            self.status_label.configure(text="ℹ️  No RPi devices found. Enter IP manually below.", 
+                                       text_color="orange")
+            
+            # Show a helpful message in the container
+            info_frame = ctk.CTkFrame(self.device_list_container, fg_color=COLOR_CARD, corner_radius=10)
+            info_frame.pack(pady=10, padx=20, fill="x")
+            
+            ctk.CTkLabel(info_frame, text="💡 Tip", font=("Roboto", 14, "bold"), 
+                        text_color=COLOR_PRIMARY).pack(pady=(15, 5))
+            ctk.CTkLabel(info_frame, text="Make sure your RPi is:", 
+                        font=FONT_BODY, text_color="gray70").pack(pady=2)
+            ctk.CTkLabel(info_frame, text="• Connected to the same network", 
+                        font=("Roboto", 11), text_color="gray60", anchor="w").pack(pady=1, padx=30, anchor="w")
+            ctk.CTkLabel(info_frame, text="• SSH is enabled", 
+                        font=("Roboto", 11), text_color="gray60", anchor="w").pack(pady=1, padx=30, anchor="w")
+            ctk.CTkLabel(info_frame, text="• Powered on and accessible", 
+                        font=("Roboto", 11), text_color="gray60", anchor="w").pack(pady=1, padx=30, anchor="w")
+            ctk.CTkLabel(info_frame, text="", font=("Roboto", 5)).pack(pady=5)  # Spacer
 
     def select_device(self, ip):
         self.manual_ip.delete(0, "end")

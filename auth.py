@@ -132,10 +132,15 @@ class RegisterFrame(ctk.CTkFrame):
             "rpi_enabled": self.rpi_var.get() == "Yes"
         }
 
-        if self.user_data["rpi_enabled"]:
-            self.setup_step2_rpi_ui()
-        else:
-            self.setup_step3_email_ui()
+        self.user_data = {
+            "name": name,
+            "username": username,
+            "gmail": gmail,
+            "password": password,
+            "rpi_enabled": self.rpi_var.get() == "Yes"
+        }
+
+        self.setup_step3_email_ui()
 
     def setup_step2_rpi_ui(self):
         self.clear_frame()
@@ -163,11 +168,23 @@ class RegisterFrame(ctk.CTkFrame):
         self.connect_btn.pack(pady=15)
         
         # Status label at the bottom
-        self.status_label = ctk.CTkLabel(self.frame, text="🔍 Scanning network for RPi devices...", 
-                                         font=FONT_BODY, text_color="gray70")
-        self.status_label.pack(pady=(5, 20))
+        self.status_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        self.status_frame.pack(pady=(5, 10), fill="x", padx=40)
+        
+        self.status_label = ctk.CTkLabel(self.status_frame, text="🔍 Scanning network...", 
+                                         font=FONT_SMALL, text_color="gray70")
+        self.status_label.pack(side="left")
+        
+        self.refresh_btn = ctk.CTkButton(self.status_frame, text="🔄", width=30, height=30, 
+                                         fg_color="transparent", hover_color=COLOR_CARD,
+                                         command=self.start_scan)
+        self.refresh_btn.pack(side="right")
         
         # Start scan in background
+        self.start_scan()
+
+    def start_scan(self):
+        self.status_label.configure(text="🔍 Scanning network...", text_color="gray70")
         threading.Thread(target=self.run_scan, daemon=True).start()
 
     def run_scan(self):
@@ -190,12 +207,13 @@ class RegisterFrame(ctk.CTkFrame):
                         font=("Roboto", 12, "bold"), text_color="gray70").pack(anchor="w", padx=10, pady=(0, 5))
             
             for dev in devices:
-                btn = ctk.CTkButton(self.device_list, text=f"🖥️  {dev['hostname']} ({dev['ip']})", 
+                btn = ctk.CTkButton(self.device_list, text=f"🖥️  {dev['hostname']}\n   {dev['ip']}", 
                                     command=lambda ip=dev['ip']: self.select_device(ip),
                                     fg_color=COLOR_CARD, hover_color=COLOR_PRIMARY,
-                                    border_width=2, border_color="gray30",
+                                    border_width=1, border_color="gray30",
+                                    height=60,
                                     anchor="w", font=FONT_BODY)
-                btn.pack(fill="x", pady=3, padx=5)
+                btn.pack(fill="x", pady=5, padx=10)
         else:
             # No devices found - show clean message
             self.status_label.configure(text="ℹ️  No RPi devices found. Enter IP manually below.", 
@@ -243,6 +261,13 @@ class RegisterFrame(ctk.CTkFrame):
             import os
             current_dir = os.path.dirname(os.path.abspath(__file__))
             if client.sync_code(current_dir):
+                 self.master.after(0, lambda: self.status_label.configure(text="Starting server...", text_color="orange"))
+                 client.start_server()
+                 self.user_data.update({
+                     "rpi_ip": ip,
+                     "rpi_user": user,
+                     "rpi_pass": pwd
+                 })
                  self.master.after(0, self.rpi_success)
             else:
                  self.master.after(0, lambda: self.rpi_fail("Sync failed"))
@@ -252,7 +277,21 @@ class RegisterFrame(ctk.CTkFrame):
 
     def rpi_success(self):
         messagebox.showinfo("Success", "RPi Connected and Synced!")
-        self.setup_step3_email_ui()
+        self.finalize_registration()
+
+    def finalize_registration(self):
+        # Register in DB
+        if database.register_user(self.user_data['name'], self.user_data['username'], 
+                                  self.user_data['gmail'], self.user_data['password'], 
+                                  self.user_data['rpi_enabled'],
+                                  self.user_data.get('rpi_ip'),
+                                  self.user_data.get('rpi_user'),
+                                  self.user_data.get('rpi_pass')):
+            messagebox.showinfo("Success", "Account created successfully!")
+            self.back_callback()
+        else:
+            messagebox.showerror("Error", "Username already exists")
+            self.back_callback()
 
     def rpi_fail(self, msg):
         self.status_label.configure(text=msg, text_color="red")
@@ -281,14 +320,9 @@ class RegisterFrame(ctk.CTkFrame):
     def verify_and_register(self):
         code = self.code_entry.get()
         if self.email_verifier.verify_code(self.user_data['gmail'], code):
-            # Register in DB
-            if database.register_user(self.user_data['name'], self.user_data['username'], 
-                                      self.user_data['gmail'], self.user_data['password'], 
-                                      self.user_data['rpi_enabled']):
-                messagebox.showinfo("Success", "Account created successfully!")
-                self.back_callback()
+            if self.user_data["rpi_enabled"]:
+                self.setup_step2_rpi_ui()
             else:
-                messagebox.showerror("Error", "Username already exists")
-                self.back_callback() # Or go back to step 1?
+                self.finalize_registration()
         else:
             messagebox.showerror("Error", "Invalid Code")

@@ -108,7 +108,7 @@ class SSHClient:
             pass
 
         for item in os.listdir(local_dir):
-            if item.startswith(".") or item == "__pycache__":
+            if item.startswith(".") or item == "__pycache__" or item == "venv" or item == "node_modules":
                 continue
                 
             local_path = os.path.join(local_dir, item)
@@ -118,6 +118,32 @@ class SSHClient:
                 sftp.put(local_path, remote_path)
             elif os.path.isdir(local_path):
                 self._put_dir_recursive(sftp, local_path, remote_path)
+
+    def run_command(self, command, wait=True):
+        """Run a command on the RPI."""
+        try:
+            stdin, stdout, stderr = self.client.exec_command(command)
+            if not wait:
+                return "Command sent", ""
+            return stdout.read().decode('utf-8'), stderr.read().decode('utf-8')
+        except Exception as e:
+            print(f"Command Execution Failed: {e}")
+            return None, str(e)
+
+    def start_server(self):
+        """Start the RPI server in the background."""
+        remote_base = f"/home/{self.username}/ai_control_code"
+        
+        # 1. Kill any existing server process
+        kill_command = "pkill -f rpi_server.py"
+        self.run_command(kill_command, wait=True)
+        
+        # 2. Start the server in the background
+        # We use nohup and & to run it in the background
+        # We also need to make sure it doesn't wait for stdout/stderr
+        command = f"cd {remote_base} && nohup python3 rpi_server.py > server.log 2>&1 &"
+        print(f"Starting server with command: {command}")
+        return self.run_command(command, wait=False)
 
     def close(self):
         self.client.close()

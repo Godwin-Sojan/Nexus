@@ -14,7 +14,10 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             gmail TEXT NOT NULL,
             password_hash TEXT NOT NULL,
-            rpi_enabled INTEGER DEFAULT 0
+            rpi_enabled INTEGER DEFAULT 0,
+            rpi_ip TEXT,
+            rpi_user TEXT,
+            rpi_pass TEXT
         )
     ''')
     cursor.execute('''
@@ -35,14 +38,14 @@ def hash_password(password):
     """Hash a password for storing."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def register_user(name, username, gmail, password, rpi_enabled=0):
+def register_user(name, username, gmail, password, rpi_enabled=0, rpi_ip=None, rpi_user=None, rpi_pass=None):
     """Register a new user. Returns True if successful, False if username exists."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
         password_hash = hash_password(password)
-        cursor.execute("INSERT INTO users (name, username, gmail, password_hash, rpi_enabled) VALUES (?, ?, ?, ?, ?)", 
-                       (name, username, gmail, password_hash, int(rpi_enabled)))
+        cursor.execute("INSERT INTO users (name, username, gmail, password_hash, rpi_enabled, rpi_ip, rpi_user, rpi_pass) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                       (name, username, gmail, password_hash, int(rpi_enabled), rpi_ip, rpi_user, rpi_pass))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -59,12 +62,27 @@ def user_exists(username):
     conn.close()
     return exists
 
+def update_user_rpi_info(username, rpi_ip, rpi_user, rpi_pass):
+    """Update RPI credentials for a user."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET rpi_ip = ?, rpi_user = ?, rpi_pass = ? WHERE username = ?", 
+                       (rpi_ip, rpi_user, rpi_pass, username))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Update RPI info error: {e}")
+        return False
+    finally:
+        conn.close()
+
 def login_user(username, password):
     """Verify user credentials. Returns user info dict if valid, None otherwise."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     password_hash = hash_password(password)
-    cursor.execute("SELECT name, username, gmail, rpi_enabled FROM users WHERE username = ? AND password_hash = ?", (username, password_hash))
+    cursor.execute("SELECT name, username, gmail, rpi_enabled, rpi_ip, rpi_user, rpi_pass FROM users WHERE username = ? AND password_hash = ?", (username, password_hash))
     user = cursor.fetchone()
     conn.close()
     
@@ -73,7 +91,10 @@ def login_user(username, password):
             "name": user[0],
             "username": user[1],
             "gmail": user[2],
-            "rpi_enabled": bool(user[3])
+            "rpi_enabled": bool(user[3]),
+            "rpi_ip": user[4],
+            "rpi_user": user[5],
+            "rpi_pass": user[6]
         }
     return None
 

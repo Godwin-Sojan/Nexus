@@ -11,8 +11,17 @@ class RPIFrame(ctk.CTkFrame):
         self.grid_rowconfigure(1, weight=1) # Expand row 1 (Chat Scroll), not row 0 (Header)
 
         # Chat History (Scrollable Frame for Bubbles)
-        self.header_label = ctk.CTkLabel(self, text="Control your RPI here", font=FONT_HEADER)
-        self.header_label.grid(row=0, column=0, pady=(20, 10))
+        self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.header_frame.grid(row=0, column=0, pady=(20, 10), sticky="ew")
+        self.header_frame.grid_columnconfigure(0, weight=1)
+
+        self.header_label = ctk.CTkLabel(self.header_frame, text="Control your RPI here", font=FONT_HEADER)
+        self.header_label.grid(row=0, column=0, padx=(140, 0))
+        
+        self.connection_btn = ctk.CTkButton(self.header_frame, text="Connecting...", width=140, height=30, 
+                                            fg_color=COLOR_CARD, hover_color=COLOR_PRIMARY,
+                                            command=self.toggle_connection, state="disabled")
+        self.connection_btn.grid(row=0, column=1, padx=20)
         
         self.chat_scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.chat_scroll.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
@@ -32,27 +41,123 @@ class RPIFrame(ctk.CTkFrame):
         self.send_btn.grid(row=0, column=1)
 
         # RPi Connection
-        self.rpi_ip = "192.168.31.230"
+        self.rpi_ip = None
+        self.rpi_user = None
+        self.rpi_pass = None
         self.rpi_port = 5000
         self.socket = None
         self.connected = False
         
-        # Start connection in a separate thread to not block UI
+    def set_rpi_info(self, ip, user=None, pwd=None):
+        """Set RPI info and attempt connection if not already connected."""
+        if not ip:
+            return
+            
+        self.rpi_ip = ip
+        self.rpi_user = user
+        self.rpi_pass = pwd
+
+        if self.connected:
+            return # Already connected
+            
+        # Start connection in a separate thread
         threading.Thread(target=self.connect_to_rpi, daemon=True).start()
 
+    def toggle_connection(self):
+        if self.connected:
+            self.show_disconnect_popup()
+        else:
+            self.append_message("System", "Connecting...")
+            threading.Thread(target=self.connect_to_rpi, daemon=True).start()
+
+    def show_disconnect_popup(self):
+        # Create a custom modal-like popup
+        self.popup = ctk.CTkToplevel(self)
+        self.popup.title("Confirm Disconnect")
+        self.popup.geometry("400x200")
+        self.popup.attributes("-topmost", True)
+        self.popup.wait_visibility() # Ensure window is viewable before grab_set
+        self.popup.grab_set() # Make it modal
+        
+        # Center the popup
+        self.popup.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - (self.popup.winfo_width() // 2)
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - (self.popup.winfo_height() // 2)
+        self.popup.geometry(f"+{x}+{y}")
+
+        label = ctk.CTkLabel(self.popup, text="Are you sure you want to disconnect?", font=FONT_SUBHEADER)
+        label.pack(pady=30)
+
+        btn_frame = ctk.CTkFrame(self.popup, fg_color="transparent")
+        btn_frame.pack(pady=10)
+
+        self.confirm_btn = ctk.CTkButton(btn_frame, text="YES (5)", width=100, state="disabled",
+                                         fg_color=COLOR_DANGER, hover_color="#8a1f15",
+                                         command=self.confirm_disconnect)
+        self.confirm_btn.pack(side="left", padx=10)
+
+        cancel_btn = ctk.CTkButton(btn_frame, text="NO", width=100,
+                                   fg_color=COLOR_CARD, hover_color=COLOR_PRIMARY,
+                                   command=self.popup.destroy)
+        cancel_btn.pack(side="left", padx=10)
+
+        self.countdown = 5
+        self.update_countdown()
+
+    def update_countdown(self):
+        if not self.popup.winfo_exists():
+            return
+            
+        if self.countdown > 0:
+            self.confirm_btn.configure(text=f"YES ({self.countdown})")
+            self.countdown -= 1
+            self.after(1000, self.update_countdown)
+        else:
+            self.confirm_btn.configure(text="YES", state="normal")
+
+    def confirm_disconnect(self):
+        self.popup.destroy()
+        self.disconnect_rpi()
+
+    def disconnect_rpi(self):
+        if self.socket:
+            try:
+                self.socket.close()
+            except:
+                pass
+        self.connected = False
+        self.socket = None
+        self.update_ui_state()
+        self.append_message("System", "Disconnected from RPi.")
+
+    def update_ui_state(self):
+        if self.connected:
+            self.connection_btn.configure(text="Disconnect", fg_color=COLOR_DANGER, state="normal")
+            self.entry.configure(state="normal", placeholder_text="Enter command...")
+            self.send_btn.configure(state="normal")
+        else:
+            self.connection_btn.configure(text="Connect", fg_color=COLOR_SUCCESS, state="normal")
+            self.entry.configure(state="disabled", placeholder_text="Disconnected - Click Connect to start")
+            self.send_btn.configure(state="disabled")
+
     def connect_to_rpi(self):
+        self.master.after(0, lambda: self.connection_btn.configure(state="disabled", text="Connecting..."))
         self.append_message("System", f"Connecting to {self.rpi_ip}:{self.rpi_port}...")
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(5)
             self.socket.connect((self.rpi_ip, self.rpi_port))
+            self.socket.settimeout(None) # Remove timeout after connection
             self.connected = True
             self.master.after(0, self.append_message, "System", "Connected to RPi!")
+            self.master.after(0, self.update_ui_state)
             
             # Start listening thread
             threading.Thread(target=self.receive_messages, daemon=True).start()
         except Exception as e:
             self.master.after(0, self.append_message, "Error", f"Connection failed: {e}")
             self.connected = False
+            self.master.after(0, self.update_ui_state)
 
     def receive_messages(self):
         while self.connected:
@@ -62,8 +167,10 @@ class RPIFrame(ctk.CTkFrame):
                     break
                 self.master.after(0, self.append_message, "RPi", data)
             except Exception as e:
-                self.master.after(0, self.append_message, "Error", f"Connection lost: {e}")
-                self.connected = False
+                if self.connected: # Only show error if we didn't manually disconnect
+                    self.master.after(0, self.append_message, "Error", f"Connection lost: {e}")
+                    self.connected = False
+                    self.master.after(0, self.update_ui_state)
                 break
 
     def send_message(self, event=None):

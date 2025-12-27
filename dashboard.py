@@ -72,11 +72,21 @@ class MainView(ctk.CTkFrame):
         username = user_info.get("username", "User")
         self.account_name.configure(text=username)
         self.notes_frame.set_user(username)
+        self.settings_frame.set_user_info(user_info, self.update_rpi_info)
         
         if not user_info.get("rpi_enabled", False):
             self.rpi_btn.configure(state="disabled", fg_color="transparent", text_color="gray50")
         else:
             self.rpi_btn.configure(state="normal", text_color=COLOR_TEXT)
+            self.rpi_frame.set_rpi_info(
+                user_info.get("rpi_ip"),
+                user_info.get("rpi_user"),
+                user_info.get("rpi_pass")
+            )
+
+    def update_rpi_info(self, ip, user, pwd):
+        """Callback from settings to update RPI info in the current session."""
+        self.rpi_frame.set_rpi_info(ip, user, pwd)
 
     def switch_frame(self, frame_to_show, active_btn):
         # Auto-save previous frame if supported

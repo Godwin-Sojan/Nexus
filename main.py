@@ -8,10 +8,8 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Initialize Database
         database.init_db()
 
-        # Load Fonts
         try:
             ctk.FontManager.load_font("assets/fonts/Poppins-Regular.ttf")
             ctk.FontManager.load_font("assets/fonts/Poppins-Bold.ttf")
@@ -22,18 +20,15 @@ class App(ctk.CTk):
         self.title("AI Assistant & System Control")
         self.geometry("1100x700")
 
-        # Configure grid layout (1x1) - Main container
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         self.current_user = None
 
-        # --- Frames ---
         self.login_frame = LoginFrame(self, self.login_success)
         self.register_frame = RegisterFrame(self, self.show_login)
         self.main_view = MainView(self, self.logout)
 
-        # Start with Login Frame
         self.show_login()
 
     def show_login(self):

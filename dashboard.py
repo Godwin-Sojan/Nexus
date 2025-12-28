@@ -11,9 +11,7 @@ class MainView(ctk.CTkFrame):
     def __init__(self, master, logout_callback):
         super().__init__(master)
         self.logout_callback = logout_callback
-        self.master = master
 
-        # Configure MainView grid
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
@@ -25,7 +23,6 @@ class MainView(ctk.CTkFrame):
         self.logo_label = ctk.CTkLabel(self.sidebar, text="AI CONTROL", font=FONT_HEADER)
         self.logo_label.grid(row=0, column=0, padx=20, pady=(40, 30))
 
-        # Navigation Buttons
         self.chatbot_btn = self.create_nav_btn("CHATBOT", self.show_chatbot, 1)
         self.rpi_btn = self.create_nav_btn("RPI CONTROL", self.show_rpi, 2)
         self.notes_btn = self.create_nav_btn("MY NOTES", self.show_notes, 3)
@@ -42,7 +39,6 @@ class MainView(ctk.CTkFrame):
         self.account_name = ctk.CTkLabel(self.account_frame, text="User", font=FONT_SUBHEADER)
         self.account_name.pack(pady=5)
 
-        # Content Area
         self.content_area = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
         self.content_area.grid(row=0, column=1, sticky="nsew")
         self.content_area.grid_columnconfigure(0, weight=1)
@@ -81,12 +77,13 @@ class MainView(ctk.CTkFrame):
             self.rpi_frame.set_rpi_info(
                 user_info.get("rpi_ip"),
                 user_info.get("rpi_user"),
-                user_info.get("rpi_pass")
+                user_info.get("rpi_pass"),
+                user_info.get("rpi_port")
             )
 
-    def update_rpi_info(self, ip, user, pwd):
+    def update_rpi_info(self, ip, user, pwd, port):
         """Callback from settings to update RPI info in the current session."""
-        self.rpi_frame.set_rpi_info(ip, user, pwd)
+        self.rpi_frame.set_rpi_info(ip, user, pwd, port)
 
     def switch_frame(self, frame_to_show, active_btn):
         # Auto-save previous frame if supported
@@ -108,12 +105,8 @@ class MainView(ctk.CTkFrame):
             self.current_frame.grid_forget() # Just in case mixed
 
         self.current_frame = frame_to_show
-        
-        # Ensure content_area doesn't shrink
         self.content_area.grid_propagate(False) 
-        
-        # Start Animation
-        self.animate_slide_in(frame_to_show, 1.0) # Start at relx=1.0
+        self.animate_slide_in(frame_to_show, 1.0)
 
     def animate_slide_in(self, frame, relx):
         if relx <= 0:

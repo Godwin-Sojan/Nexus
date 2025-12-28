@@ -10,7 +10,6 @@ class RPIFrame(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1) # Expand row 1 (Chat Scroll), not row 0 (Header)
 
-        # Chat History (Scrollable Frame for Bubbles)
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.header_frame.grid(row=0, column=0, pady=(20, 10), sticky="ew")
         self.header_frame.grid_columnconfigure(0, weight=1)
@@ -40,7 +39,6 @@ class RPIFrame(ctk.CTkFrame):
                                       command=self.send_message)
         self.send_btn.grid(row=0, column=1)
 
-        # RPi Connection
         self.rpi_ip = None
         self.rpi_user = None
         self.rpi_pass = None
@@ -48,7 +46,7 @@ class RPIFrame(ctk.CTkFrame):
         self.socket = None
         self.connected = False
         
-    def set_rpi_info(self, ip, user=None, pwd=None):
+    def set_rpi_info(self, ip, user=None, pwd=None, port=5000):
         """Set RPI info and attempt connection if not already connected."""
         if not ip:
             return
@@ -56,6 +54,7 @@ class RPIFrame(ctk.CTkFrame):
         self.rpi_ip = ip
         self.rpi_user = user
         self.rpi_pass = pwd
+        self.rpi_port = port or 5000
 
         if self.connected:
             return # Already connected
@@ -71,15 +70,13 @@ class RPIFrame(ctk.CTkFrame):
             threading.Thread(target=self.connect_to_rpi, daemon=True).start()
 
     def show_disconnect_popup(self):
-        # Create a custom modal-like popup
         self.popup = ctk.CTkToplevel(self)
         self.popup.title("Confirm Disconnect")
         self.popup.geometry("400x200")
         self.popup.attributes("-topmost", True)
-        self.popup.wait_visibility() # Ensure window is viewable before grab_set
-        self.popup.grab_set() # Make it modal
+        self.popup.wait_visibility()
+        self.popup.grab_set()
         
-        # Center the popup
         self.popup.update_idletasks()
         x = self.winfo_rootx() + (self.winfo_width() // 2) - (self.popup.winfo_width() // 2)
         y = self.winfo_rooty() + (self.winfo_height() // 2) - (self.popup.winfo_height() // 2)
@@ -190,30 +187,25 @@ class RPIFrame(ctk.CTkFrame):
             self.append_message("System", "Not connected to RPi.")
 
     def append_message(self, sender, text):
-        # Create Bubble Frame
         bubble_frame = ctk.CTkFrame(self.chat_scroll, fg_color="transparent")
         bubble_frame.pack(fill="x", pady=5)
         
         if sender == "User":
-            # Right aligned, Primary Color
             bubble = ctk.CTkLabel(bubble_frame, text=text, font=FONT_MONO, 
                                   fg_color=COLOR_PRIMARY, text_color=COLOR_BG,
                                   corner_radius=15, padx=15, pady=10, wraplength=400, justify="left")
             bubble.pack(side="right", padx=(50, 10))
         elif sender == "System" or sender == "Error":
-             # Center aligned, Gray/Red
             color = "#e74c3c" if sender == "Error" else "#95a5a6"
             bubble = ctk.CTkLabel(bubble_frame, text=text, font=FONT_BODY, 
                                   fg_color=color, text_color="white",
                                   corner_radius=10, padx=10, pady=5, wraplength=400, justify="center")
             bubble.pack(side="top", pady=5)
         else:
-            # Left aligned, Card Color, Monospace
             bubble = ctk.CTkLabel(bubble_frame, text=text, font=FONT_MONO, 
                                   fg_color=COLOR_ACCENT_3, text_color=COLOR_BG,
                                   corner_radius=15, padx=15, pady=10, wraplength=400, justify="left")
             bubble.pack(side="left", padx=(10, 50))
             
-        # Scroll to bottom
         self.chat_scroll.update_idletasks()
         self.chat_scroll._parent_canvas.yview_moveto(1.0)

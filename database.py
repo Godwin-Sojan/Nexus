@@ -4,7 +4,6 @@ import hashlib
 DB_NAME = "users.db"
 
 def init_db():
-    """Initialize the database with the users and notes tables."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
@@ -17,9 +16,15 @@ def init_db():
             rpi_enabled INTEGER DEFAULT 0,
             rpi_ip TEXT,
             rpi_user TEXT,
-            rpi_pass TEXT
+            rpi_pass TEXT,
+            rpi_port INTEGER DEFAULT 5000
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN rpi_port INTEGER DEFAULT 5000")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,17 +40,15 @@ def init_db():
     migrate_legacy_notes()
 
 def hash_password(password):
-    """Hash a password for storing."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def register_user(name, username, gmail, password, rpi_enabled=0, rpi_ip=None, rpi_user=None, rpi_pass=None):
-    """Register a new user. Returns True if successful, False if username exists."""
+def register_user(name, username, gmail, password, rpi_enabled=0, rpi_ip=None, rpi_user=None, rpi_pass=None, rpi_port=5000):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
         password_hash = hash_password(password)
-        cursor.execute("INSERT INTO users (name, username, gmail, password_hash, rpi_enabled, rpi_ip, rpi_user, rpi_pass) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                       (name, username, gmail, password_hash, int(rpi_enabled), rpi_ip, rpi_user, rpi_pass))
+        cursor.execute("INSERT INTO users (name, username, gmail, password_hash, rpi_enabled, rpi_ip, rpi_user, rpi_pass, rpi_port) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                       (name, username, gmail, password_hash, int(rpi_enabled), rpi_ip, rpi_user, rpi_pass, rpi_port))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -54,7 +57,6 @@ def register_user(name, username, gmail, password, rpi_enabled=0, rpi_ip=None, r
         conn.close()
 
 def user_exists(username):
-    """Check if a username already exists in the database."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM users WHERE username = ?", (username,))
@@ -62,13 +64,12 @@ def user_exists(username):
     conn.close()
     return exists
 
-def update_user_rpi_info(username, rpi_ip, rpi_user, rpi_pass):
-    """Update RPI credentials for a user."""
+def update_user_rpi_info(username, rpi_ip, rpi_user, rpi_pass, rpi_port=5000):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE users SET rpi_ip = ?, rpi_user = ?, rpi_pass = ? WHERE username = ?", 
-                       (rpi_ip, rpi_user, rpi_pass, username))
+        cursor.execute("UPDATE users SET rpi_ip = ?, rpi_user = ?, rpi_pass = ?, rpi_port = ? WHERE username = ?", 
+                       (rpi_ip, rpi_user, rpi_pass, rpi_port, username))
         conn.commit()
         return True
     except Exception as e:
@@ -78,11 +79,10 @@ def update_user_rpi_info(username, rpi_ip, rpi_user, rpi_pass):
         conn.close()
 
 def login_user(username, password):
-    """Verify user credentials. Returns user info dict if valid, None otherwise."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     password_hash = hash_password(password)
-    cursor.execute("SELECT name, username, gmail, rpi_enabled, rpi_ip, rpi_user, rpi_pass FROM users WHERE username = ? AND password_hash = ?", (username, password_hash))
+    cursor.execute("SELECT name, username, gmail, rpi_enabled, rpi_ip, rpi_user, rpi_pass, rpi_port FROM users WHERE username = ? AND password_hash = ?", (username, password_hash))
     user = cursor.fetchone()
     conn.close()
     
@@ -94,7 +94,8 @@ def login_user(username, password):
             "rpi_enabled": bool(user[3]),
             "rpi_ip": user[4],
             "rpi_user": user[5],
-            "rpi_pass": user[6]
+            "rpi_pass": user[6],
+            "rpi_port": user[7]
         }
     return None
 
@@ -128,7 +129,6 @@ def migrate_legacy_notes():
 # --- Section Based Notes API ---
 
 def get_sections(username):
-    """Get all note sections for a user."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("SELECT id, title, updated_at FROM user_notes WHERE username = ? ORDER BY updated_at DESC", (username,))
@@ -161,7 +161,6 @@ def delete_all_sections(username):
     conn.close()
 
 def get_section_content(section_id):
-    """Get content of a specific section."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("SELECT content FROM user_notes WHERE id = ?", (section_id,))
@@ -170,7 +169,6 @@ def get_section_content(section_id):
     return result[0] if result else ""
 
 def save_section_content(section_id, content):
-    """Save content to a section and update timestamp."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("UPDATE user_notes SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (content, section_id))
